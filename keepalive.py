@@ -3,7 +3,9 @@ import logging
 from datetime import datetime
 
 from pyrogram import Client, idle, raw
+from pyrogram.handlers import RawUpdateHandler
 from pyrogram.raw import types
+from pyrogram import ContinuePropagation
 
 logger = logging.getLogger("KeepAlive")
 
@@ -76,7 +78,7 @@ class KeepAliveManager:
 
         # Register raw update handler to catch UpdatesTooLong
         self.client.add_handler(
-            raw.handlers.RawUpdateHandler(self._raw_update_handler),
+            RawUpdateHandler(self._raw_update_handler),
             group=-1,  # highest priority
         )
 
@@ -165,4 +167,4 @@ class KeepAliveManager:
             self._updates_too_long_flag.set()
 
         # Pass through (don't consume the update)
-        raise raw.handlers.ContinuePropagation
+        raise ContinuePropagation
