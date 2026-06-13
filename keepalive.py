@@ -64,6 +64,22 @@ class KeepAliveManager:
 
     async def _lifecycle(self):
         """One full start → run → stop cycle."""
+        # Clear the flag before starting so a leftover set from the previous
+        # cycle doesn't cause _wait_for_failure to return immediately, which
+        # would trigger client.start() on an already-running client.
+        self._updates_too_long_flag.clear()
+
+        # If a previous client.stop() failed to fully tear down the
+        # connection, pyrogram's internal is_connected flag can be left
+        # True, causing the next start() -> connect() to immediately raise
+        # "Client is already connected". Force a disconnect first if so.
+        if self.client.is_connected:
+            logger.warning("Client still marked connected — forcing disconnect before restart.")
+            try:
+                await self.client.disconnect()
+            except Exception as exc:
+                logger.warning("Error during forced disconnect: %s", exc)
+
         await self.client.start()
 
         # Register raw update handler to catch UpdatesTooLong
@@ -88,7 +104,11 @@ class KeepAliveManager:
             try:
                 await self.client.stop()
             except Exception as exc:
-                logger.warning("Error during client.stop(): %s", exc)
+                logger.warning("Error during client.stop(): %s — forcing disconnect", exc)
+                try:
+                    await self.client.disconnect()
+                except Exception as exc2:
+                    logger.warning("Error during forced disconnect: %s", exc2)
 
     async def _wait_for_failure(self):
         """
@@ -99,9 +119,10 @@ class KeepAliveManager:
         """
         idle_task = asyncio.create_task(idle())
         too_long_task = asyncio.create_task(self._updates_too_long_flag.wait())
+        shutdown_task = asyncio.create_task(self._shutdown_flag.wait())
 
         done, pending = await asyncio.wait(
-            [idle_task, too_long_task, self._shutdown_flag.wait()],
+            [idle_task, too_long_task, shutdown_task],
             return_when=asyncio.FIRST_COMPLETED,
         )
 

@@ -1,5 +1,3 @@
-#(©)Codexbotz
-
 from aiohttp import web
 from plugins import web_server
 
@@ -30,7 +28,6 @@ ascii_art = """
 ░╚════╝░░╚════╝░╚═════╝░╚══════╝╚═╝░░╚═╝╚═════╝░░╚════╝░░░░╚═╝░░░╚══════╝
 """
 
-
 class Bot(Client):
     def __init__(self):
         super().__init__(
@@ -42,15 +39,17 @@ class Bot(Client):
             bot_token=TG_BOT_TOKEN,
         )
         self.LOGGER = LOGGER
-        self._keepalive: KeepAliveManager | None = None
+        self._keepalive = None
 
     async def start(self):
+        """Setup only. Don't block here — KeepAliveManager handles the run loop."""
         await super().start()
 
         usr_bot_me = await self.get_me()
         self.uptime = datetime.now()
         self.username = usr_bot_me.username
 
+        # ── Force Sub Channel ──
         if FORCE_SUB_CHANNEL:
             try:
                 link = (await self.get_chat(FORCE_SUB_CHANNEL)).invite_link
@@ -61,60 +60,60 @@ class Bot(Client):
             except Exception as a:
                 self.LOGGER(__name__).warning(a)
                 self.LOGGER(__name__).warning(
-                    "Bot can't Export Invite link from Force Sub Channel!"
+                    "Bot can't export invite link from Force Sub Channel!"
                 )
                 self.LOGGER(__name__).warning(
-                    "Please Double check the FORCE_SUB_CHANNEL value and Make sure "
-                    "Bot is Admin in channel with Invite Users via Link Permission, "
-                    "Current Force Sub Channel Value: %s", FORCE_SUB_CHANNEL
+                    "Please double-check FORCE_SUB_CHANNEL and ensure bot is admin "
+                    "with 'Invite Users via Link' permission. Current: %s",
+                    FORCE_SUB_CHANNEL,
                 )
                 self.LOGGER(__name__).info(
-                    "\nBot Stopped. Join https://t.me/CodeXBotzSupport for support"
+                    "Bot Stopped. Join https://t.me/CodeXBotzSupport"
                 )
-                sys.exit()
+                #sys.exit()
 
+        # ── DB Channel ──
         try:
             db_channel = await self.get_chat(CHANNEL_ID)
+            if not db_channel:
+                db_channel - await self.get_chat("gunsncoffee")
             self.db_channel = db_channel
             test = await self.send_message(chat_id=db_channel.id, text="Test Message")
             await test.delete()
         except Exception as e:
             self.LOGGER(__name__).warning(e)
             self.LOGGER(__name__).warning(
-                "Make Sure bot is Admin in DB Channel, and Double check the "
-                "CHANNEL_ID Value, Current Value %s", CHANNEL_ID
+                "Make sure bot is Admin in DB Channel. Double-check CHANNEL_ID. "
+                "Current: %s", CHANNEL_ID
             )
             self.LOGGER(__name__).info(
-                "\nBot Stopped. Join https://t.me/CodeXBotzSupport for support"
+                "Bot Stopped. Join https://t.me/CodeXBotzSupport"
             )
-            sys.exit()
+            #sys.exit()
 
         self.set_parse_mode(ParseMode.HTML)
-        self.LOGGER(__name__).info(
-            "Bot Running..!\n\nCreated by \nhttps://t.me/CodeXBotz"
-        )
+        self.LOGGER(__name__).info("Bot Running..!")
         print(ascii_art)
-        print("""Welcome to CodeXBotz File Sharing Bot""")
+        print("Welcome to CodeXBotz File Sharing Bot")
 
-        app = web.AppRunner(await web_server())
-        await app.setup()
-        await web.TCPSite(app, "0.0.0.0", PORT).start()
+        # ── Web server ──
+        #app = web.AppRunner(await web_server())
+        #await app.setup()
+        #await web.TCPSite(app, "0.0.0.0", PORT).start()
 
-        await super().stop()
-
+        # ── Hand over to keepalive (blocks forever) ──
         self._keepalive = KeepAliveManager(
             client=self,
-            heartbeat_interval=300,
+            heartbeat_interval=300,  # 5 min
             reconnect_delay=5,
         )
         await self._keepalive.run()
 
     async def stop(self, *args):
         if self._keepalive:
-            self._keepalive.request_shutdown()
+            self._keepalive.shutdown()
         await super().stop()
         self.LOGGER(__name__).info("Bot stopped.")
-
 
 
 if __name__ == "__main__":
@@ -122,5 +121,4 @@ if __name__ == "__main__":
     try:
         bot.run()
     except KeyboardInterrupt:
-        asyncio.run(bot.stop())
-
+        pass
