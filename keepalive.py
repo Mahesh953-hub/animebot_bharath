@@ -62,13 +62,8 @@ class KeepAliveManager:
         self._shutdown_flag.set()
         self._updates_too_long_flag.set()  # unblock any waiting coros
 
-    # ── Internal lifecycle ──────────────────────────────────────
 
     async def _lifecycle(self):
-        """One full start → run → stop cycle."""
-        # Clear the flag before starting so a leftover set from the previous
-        # cycle doesn't cause _wait_for_failure to return immediately, which
-        # would trigger client.start() on an already-running client.
         self._updates_too_long_flag.clear()
 
         if self.client.is_connected:
@@ -76,7 +71,6 @@ class KeepAliveManager:
         else:
             await self.client.start()
 
-        # Register raw update handler to catch UpdatesTooLong
         self.client.add_handler(
             RawUpdateHandler(self._raw_update_handler),
             group=-1,  # highest priority
@@ -85,7 +79,6 @@ class KeepAliveManager:
         # Start heartbeat in background
         self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
 
-        # Wait until something breaks or we're told to stop
         try:
             await self._wait_for_failure()
         finally:
@@ -127,7 +120,6 @@ class KeepAliveManager:
             logger.warning("UpdatesTooLong triggered — forcing reconnect.")
             self._updates_too_long_flag.clear()
 
-    # ── Heartbeat ───────────────────────────────────────────────
 
     async def _heartbeat_loop(self):
         """Periodically pings Telegram to keep the TCP connection alive."""
@@ -140,8 +132,8 @@ class KeepAliveManager:
                 logger.debug("Heartbeat OK at %s", datetime.now().isoformat())
             except asyncio.TimeoutError:
                 logger.warning("Heartbeat timed out — connection likely stale.")
-                # Let the main loop detect the failure and reconnect
                 return
+
             except Exception as exc:
                 logger.warning("Heartbeat failed: %s", exc)
                 return
@@ -155,7 +147,6 @@ class KeepAliveManager:
             except asyncio.TimeoutError:
                 pass  # normal interval elapsed, loop again
 
-    # ── Raw Update Handler ──────────────────────────────────────
 
     async def _raw_update_handler(self, client, update, users, chats):
         """
@@ -166,5 +157,4 @@ class KeepAliveManager:
             logger.warning("Received UpdatesTooLong from Telegram.")
             self._updates_too_long_flag.set()
 
-        # Pass through (don't consume the update)
         raise ContinuePropagation

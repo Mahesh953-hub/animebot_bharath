@@ -4,6 +4,8 @@ from plugins import web_server
 import pyromod.listen
 from pyrogram import Client
 from pyrogram.enums import ParseMode
+import asyncio
+import signal
 import sys
 from datetime import datetime
 
@@ -101,17 +103,26 @@ class Bot(Client):
         #await app.setup()
         #await web.TCPSite(app, "0.0.0.0", PORT).start()
 
-        # ── Hand over to keepalive (blocks forever) ──
         self._keepalive = KeepAliveManager(
             client=self,
             heartbeat_interval=300,  # 5 min
             reconnect_delay=5,
         )
+
+        loop = asyncio.get_event_loop()
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            try:
+                loop.add_signal_handler(sig, self._keepalive.request_shutdown)
+            except NotImplementedError:
+                pass
+
         await self._keepalive.run()
+        await super().stop()
+        self.LOGGER(__name__).info("Bot stopped.")
 
     async def stop(self, *args):
         if self._keepalive:
-            self._keepalive.shutdown()
+            self._keepalive.request_shutdown()
         await super().stop()
         self.LOGGER(__name__).info("Bot stopped.")
 
