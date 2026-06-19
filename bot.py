@@ -103,11 +103,13 @@ class Bot(Client):
         #await app.setup()
         #await web.TCPSite(app, "0.0.0.0", PORT).start()
 
+        # ── Hand over to keepalive (blocks forever) ──
         self._keepalive = KeepAliveManager(
             client=self,
             heartbeat_interval=300,  # 5 min
             reconnect_delay=5,
         )
+
 
         loop = asyncio.get_event_loop()
         for sig in (signal.SIGINT, signal.SIGTERM):
@@ -117,13 +119,14 @@ class Bot(Client):
                 pass
 
         await self._keepalive.run()
-        await super().stop()
+
         self.LOGGER(__name__).info("Bot stopped.")
 
     async def stop(self, *args):
         if self._keepalive:
             self._keepalive.request_shutdown()
-        await super().stop()
+        if self.is_connected:
+            await super().stop()
         self.LOGGER(__name__).info("Bot stopped.")
 
 
